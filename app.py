@@ -364,9 +364,7 @@ active_sku = active_res["sku"]
 # ---------------------------------------------------------
 # 5. 사이드바: 담당자 4단계 예외 기반 알림 센터
 # ---------------------------------------------------------
-# ---------------------------------------------------------
-# 5. 사이드바: 담당자 4단계 예외 기반 알림 센터
-# ---------------------------------------------------------
+
 with st.sidebar:
     st.header("담당자 알림 시스템")
     st.caption("4단계 예외 기반 경보 규칙에 따라 이상 징후를 자동 감지합니다.")
@@ -375,20 +373,20 @@ with st.sidebar:
         st.markdown("""
         <div style="font-size:0.83rem; line-height:1.55;">
             <div style="margin-bottom:6px;">
-                <strong style="color:#B91C1C;">🔴 1) 긴급</strong><br>
+                <strong style="color:#B91C1C;">🔴 긴급</strong><br>
                 • 긴급 항공 전환 경보 (해상 입고 전 품절 방어 필요)
             </div>
             <div style="margin-bottom:6px;">
-                <strong style="color:#C2410C;">🟠 2) 주의 (주황색)</strong><br>
+                <strong style="color:#C2410C;">🟠 주의</strong><br>
                 • 판매 속도가 느려 폐기 물량 발생이 예상될 경우<br>
                 • 품절 임박 SKU 존재 시
             </div>
             <div style="margin-bottom:6px;">
-                <strong style="color:#A16207;">🟡 3) 검토 (노란색)</strong><br>
+                <strong style="color:#A16207;">🟡 검토</strong><br>
                 • 담당자 입력 발주량이 신규 발주 상한 초과 시
             </div>
             <div>
-                <strong style="color:#1D4ED8;">🔵 4) 변동 (파란색)</strong><br>
+                <strong style="color:#1D4ED8;">🔵 변동</strong><br>
                 • 영업팀에서 신규 확정 B2B 대량 화물 주문 등록 시<br>
                 • 포워더/물류 시스템에서 해상/항공 입항 예정일 지연 갱신 시
             </div>
