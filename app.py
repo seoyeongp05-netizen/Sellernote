@@ -742,10 +742,8 @@ with tab3:
     tick_dates_tr = [BASE_DATE + datetime.timedelta(days=d) for d in tick_days_tr]
     tick_labels_tr = [f"{d//7}주 후<br>({fmt_md(d)})" if d > 0 else f"기준일<br>({fmt_md(0)})" for d in tick_days_tr]
 
-    # 희망 발주량 반영 시뮬레이션 (리드타임 구간 비교용)
-    t_tr = active_sku["terms"]
-    planned_qty_tr = int(active_sku["planned"])
-    end_tr = max(7, active_res["air"], active_res["seaDay"], t_tr["sea"])
+   # 해상 입고일(seaDay)까지의 리드타임 구간만 집중 표시하여 상단 카드와 100% 일치시킴
+    end_tr = max(7, active_res["air"], active_res["seaDay"])
     tr_days = list(range(0, end_tr + 1))
     tr_dates = [BASE_DATE + datetime.timedelta(days=d) for d in tr_days]
 
@@ -755,50 +753,44 @@ with tab3:
     tick_dates_tr = [BASE_DATE + datetime.timedelta(days=d) for d in tick_days_tr]
     tick_labels_tr = [f"{d//7}주 후<br>({fmt_md(d)})" if d > 0 else f"기준일<br>({fmt_md(0)})" for d in tick_days_tr]
 
-    sim_base_tr = simulate(active_sku, 2, horizon=end_tr + 1)
-    sim_plan_tr = simulate(
-        active_sku, 2,
-        extra=[{"id": "희망 신규 발주", "qty": planned_qty_tr, "day": t_tr["sea"], "deadline": t_tr["sea"] + t_tr["window"]}],
-        horizon=end_tr + 1
-    )
-
-    p20_tr = [round(active_res["p20"]["lines"][d][0], 1) for d in tr_days]
     mean_tr = [round(active_res["mean"]["lines"][d][0], 1) for d in tr_days]
-    p95_dem = [round(sim_base_tr["lines"][d][0], 1) for d in tr_days]
-    p95_sup = [round(sim_base_tr["lines"][d][1], 1) for d in tr_days]
-    plan_sup_tr = [round(sim_plan_tr["lines"][d][1], 1) for d in tr_days]
+    p95_dem = [round(active_res["p95"]["lines"][d][0], 1) for d in tr_days]
+    p95_sup = [round(active_res["p95"]["lines"][d][1], 1) for d in tr_days]
 
     fig_tr = go.Figure()
-    # 상한(P95) 경계선
-    fig_tr.add_trace(go.Scatter(
-        x=tr_dates, y=p95_dem, mode="lines",
-        line=dict(color="rgba(9, 99, 81, 0.45)", width=1.5, dash="dot"),
-        name="수요 상한 (P95)"
-    ))
-    # 하한(P20) ~ 상한(P95) 음영 밴드
-    fig_tr.add_trace(go.Scatter(
-        x=tr_dates, y=p20_tr, mode="lines", line=dict(width=0),
-        fill="tonexty", fillcolor="rgba(9, 99, 81, 0.14)",
-        name="수요 예측 구간"
-    ))
-    # 평균 누적 수요
-    fig_tr.add_trace(go.Scatter(
-        x=tr_dates, y=mean_tr, mode="lines",
-        line=dict(color="#096351", width=3.5),
-        name="평균 누적 수요"
-    ))
-    # 기존 누적 가용 공급 (파란색 계단형)
+
+    # 1) 누적 가용 공급 (파란색 굵은 계단선)
     fig_tr.add_trace(go.Scatter(
         x=tr_dates, y=p95_sup, mode="lines",
-        line=dict(color="#2563EB", width=3, shape="hv"),
-        name="기존 가용 공급"
+        line=dict(color="#2563EB", width=3.5, shape="hv"),
+        name="누적 가용 공급 (현재재고 + 예정입고)"
     ))
-    # 희망 발주량 반영 공급 (주황색 점선 계단형)
+
+    # 2) 수요 상한 (P95 · 스파이크 기준)
     fig_tr.add_trace(go.Scatter(
-        x=tr_dates, y=plan_sup_tr, mode="lines",
-        line=dict(color="#EA580C", width=3, dash="dash", shape="hv"),
-        name=f"희망 발주({planned_qty_tr:,}개) 반영 공급"
+        x=tr_dates, y=p95_dem, mode="lines",
+        line=dict(color="#D97706", width=2.5, dash="dot"),
+        name="누적 수요 상한 (P95 · 최대 예상)"
     ))
+
+    # 3) 평균 누적 수요 (초록 실선)
+    fig_tr.add_trace(go.Scatter(
+        x=tr_dates, y=mean_tr, mode="lines",
+        line=dict(color="#096351", width=3),
+        name="누적 수요 평균"
+    ))
+
+    # 4) 긴급 항공 투입 권고량이 있을 경우, 항공 투입 후 보강된 공급선 표시
+    if active_res["airQty"] > 0:
+        air_boost_sup = [
+            s + (active_res["airQty"] if d >= active_res["air"] else 0)
+            for d, s in zip(tr_days, p95_sup)
+        ]
+        fig_tr.add_trace(go.Scatter(
+            x=tr_dates, y=air_boost_sup, mode="lines",
+            line=dict(color="#DC2626", width=2.5, dash="dash", shape="hv"),
+            name=f"긴급 항공({active_res['airQty']:,}개) 투입 시 공급"
+        ))
 
     air_dt = BASE_DATE + datetime.timedelta(days=active_res["air"])
     sea_tr_dt = BASE_DATE + datetime.timedelta(days=active_res["seaDay"])
@@ -807,24 +799,24 @@ with tab3:
     fig_tr.add_annotation(x=air_dt, y=1.06, yref="paper", text=f"항공 입고 가능일 ({fmt_md(active_res['air'])})", showarrow=False, font=dict(color="#0284C7", size=12))
 
     fig_tr.add_vline(x=sea_tr_dt, line_dash="dash", line_color="#7C3AED", line_width=2)
-    fig_tr.add_annotation(x=sea_tr_dt, y=1.06, yref="paper", text=f"해상 입고일 ({fmt_md(active_res['seaDay'])})", showarrow=False, font=dict(color="#7C3AED", size=12))
+    fig_tr.add_annotation(x=sea_tr_dt, y=1.06, yref="paper", text=f"기존 해상 입고일 ({fmt_md(active_res['seaDay'])})", showarrow=False, font=dict(color="#7C3AED", size=12))
 
     if active_res["first"] is not None:
         first_dt = BASE_DATE + datetime.timedelta(days=active_res["first"])
-        fig_tr.add_vline(x=first_dt, line_dash="solid", line_color="#D93025", line_width=2)
-        fig_tr.add_annotation(x=first_dt, y=0.92, yref="paper", text=f"최초 품절 ({fmt_md(active_res['first'])})", showarrow=False, bgcolor="#FCE5E4", font=dict(color="#D93025", size=12))
+        fig_tr.add_vline(x=first_dt, line_dash="solid", line_color="#D93025", line_width=2.5)
+        fig_tr.add_annotation(x=first_dt, y=0.90, yref="paper", text=f"최초 품절 ({fmt_md(active_res['first'])})", showarrow=False, bgcolor="#FCE5E4", font=dict(color="#D93025", size=12))
 
     fig_tr.update_layout(
-        title=dict(text="리드타임 구간 내 수요 예측(평균 및 상·하한) vs 누적 가용 공급 비교", y=0.96),
+        title=dict(text="기존 해상 입고일 전 누적 공급 vs 누적 수요 비교", y=0.96),
         xaxis=dict(tickmode="array", tickvals=tick_dates_tr, ticktext=tick_labels_tr, showgrid=False),
         yaxis=dict(title="누적 수량 (개)", gridcolor="#E6ECE9", zeroline=True, zerolinecolor="#D9E5DF"),
         plot_bgcolor="white",
-        height=460,
+        height=430,
         margin=dict(t=105, b=40, l=50, r=30),
         legend=dict(orientation="h", yanchor="bottom", y=1.13, xanchor="left", x=0)
     )
     st.plotly_chart(fig_tr, use_container_width=True)
-    st.caption("파란색 계단선(누적 가용 공급)이 초록색 점선(수요 상한 P95) 아래로 내려가는 지점이 최초 품절 예상 시점이며, 항공 입고일부터 해상 입고 전날까지의 부족분이 항공 긴급 투입 권고량입니다.")
+    st.caption("파란색 계단선(가용 공급)이 주황색 점선(수요 상한 P95) 위에 유지되면 해상 입고 전 품절이 없으며, 아래로 내려가면 빨간 수직선 시점에 품절이 발생합니다.")
 # =========================================================
 # [탭 4] SKU 발주 상태
 # =========================================================
