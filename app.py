@@ -374,7 +374,7 @@ with st.sidebar:
         <div style="font-size:0.83rem; line-height:1.55;">
             <div style="margin-bottom:6px;">
                 <strong style="color:#B91C1C;">🔴 긴급</strong><br>
-                • 긴급 항공 전환 경보 (해상 입고 전 품절 방어 필요)
+                • 긴급 항공 전환 경보
             </div>
             <div style="margin-bottom:6px;">
                 <strong style="color:#C2410C;">🟠 주의</strong><br>
