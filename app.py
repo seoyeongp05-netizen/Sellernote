@@ -317,13 +317,24 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-sku_options = [s["id"] for s in st.session_state.sku_data]
-selected_sku_id = st.selectbox(
-    "검토할 품목 (SKU) 선택",
-    options=sku_options,
-    format_func=lambda x: f"{x} · {next(s['name'] for s in st.session_state.sku_data if s['id'] == x)}"
+sku_query = st.text_input(
+    "SKU ID 직접 입력",
+    value=st.session_state.sku_data[0]["id"],
+    placeholder="예: SN-202 또는 오트밀"
+).strip()
+
+matched_res = next(
+    (r for r in results if sku_query.lower() == r["sku"]["id"].lower()),
+    next((r for r in results if sku_query.lower() in r["sku"]["id"].lower() or sku_query.lower() in r["sku"]["name"].lower()), None)
 )
-active_res = next(r for r in results if r["sku"]["id"] == selected_sku_id)
+
+if matched_res is None:
+    st.warning(f"'{sku_query}'와 일치하는 SKU가 없어 기본 품목({results[0]['sku']['id']})을 표시합니다.")
+    active_res = results[0]
+else:
+    active_res = matched_res
+
+selected_sku_id = active_res["sku"]["id"]
 active_sku = active_res["sku"]
 
 # ---------------------------------------------------------
