@@ -367,71 +367,94 @@ active_sku = active_res["sku"]
 
 with st.sidebar:
     st.header("담당자 알림 시스템")
-    st.caption("4단계 예외 기반 경보 규칙에 따라 이상 징후를 자동 감지합니다.")
+    st.caption("경보 피로(Alert Fatigue) 방지를 위해 즉시 푸시와 일일 요약을 분리합니다.")
 
-    with st.expander("4단계 경고 발동 기준 안내", expanded=True):
+    with st.expander("4단계 경고 발동 기준 안내", expanded=False):
         st.markdown("""
-        <div style="font-size:0.83rem; line-height:1.55;">
+        <div style="font-size:0.82rem; line-height:1.55;">
             <div style="margin-bottom:6px;">
-                <strong style="color:#B91C1C;">🔴 긴급</strong><br>
-                • 긴급 항공 전환 경보
+                <strong style="color:#B91C1C;">🔴 긴급 (즉시 푸시)</strong><br>
+                • 긴급 항공 전환 경보 (핵심 품목·고위험 부족 시 즉시 발송)
             </div>
             <div style="margin-bottom:6px;">
-                <strong style="color:#C2410C;">🟠 주의</strong><br>
-                • 판매 속도가 느려 폐기 물량 발생이 예상될 경우<br>
+                <strong style="color:#1D4ED8;">🔵 변동 (즉시 푸시)</strong><br>
+                • 영업팀 신규 확정 B2B 대량 주문 등록 시<br>
+                • 포워더/물류 시스템 해상·항공 입항 예정일 지연 갱신 시
+            </div>
+            <div style="margin-bottom:6px;">
+                <strong style="color:#C2410C;">🟠 주의 (일일 요약)</strong><br>
+                • 판매 속도 둔화로 폐기 물량 발생 예상 시<br>
                 • 품절 임박 SKU 존재 시
             </div>
-            <div style="margin-bottom:6px;">
-                <strong style="color:#A16207;">🟡 검토</strong><br>
-                • 담당자 입력 발주량이 신규 발주 상한 초과 시
-            </div>
             <div>
-                <strong style="color:#1D4ED8;">🔵 변동</strong><br>
-                • 영업팀에서 신규 확정 B2B 대량 화물 주문 등록 시<br>
-                • 포워더/물류 시스템에서 해상/항공 입항 예정일 지연 갱신 시
+                <strong style="color:#A16207;">🟡 검토 (일일 요약)</strong><br>
+                • 담당자 입력 발주량이 신규 발주 상한 초과 시
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-    alerts = []
+    # 출고량 상위 20% 핵심 SKU(A등급) 선별
+    sorted_by_vol = sorted(results, key=lambda x: x["sku"]["ship"][1], reverse=True)
+    top_a_ids = {r["sku"]["id"] for r in sorted_by_vol[:max(1, len(results) // 5)]}
+
+    all_alerts = []
     for r in results:
         sid, sname = r["sku"]["id"], r["sku"]["name"]
+        is_core = sid in top_a_ids
         if r["airQty"] > 0:
-            alerts.append((0, "긴급", sid, sname, "긴급 항공 투입 검토", f"항공 추가 {r['airQty']:,}개 · 최초 부족 {fmt_md(r['first'])}"))
+            # 핵심 A등급이면서 부족량이 100개 이상인 경우만 즉시 푸시 대상 지정
+            push_now = is_core and r["airQty"] >= 100
+            all_alerts.append((0, "긴급", sid, sname, "긴급 항공 투입 검토", f"항공 추가 {r['airQty']:,}개 · 최초 부족 {fmt_md(r['first'])}", push_now))
         if r["waste"] > 0:
-            alerts.append((1, "주의", sid, sname, "판매 마감 시 잔량 예상", f"현재 로트 P20 기준 {r['waste']:,}개 만료 예상"))
+            all_alerts.append((2, "주의", sid, sname, "판매 마감 시 잔량 예상", f"현재 로트 P20 기준 {r['waste']:,}개 만료 예상", False))
         if r["first"] is not None:
-            alerts.append((1, "주의", sid, sname, "해상 입고 전 품절 예상", f"{fmt_md(r['first'])} ({r['first']//7 + 1}주차) 품절 예상"))
+            all_alerts.append((2, "주의", sid, sname, "해상 입고 전 품절 예상", f"{fmt_md(r['first'])} ({r['first']//7 + 1}주차) 품절 예상", False))
         if r["sku"]["planned"] > r["cap"]:
-            alerts.append((2, "검토", sid, sname, "입력 발주량 상한 초과", f"{r['sku']['planned']:,}개 입력 / {r['cap']:,}개 상한"))
+            all_alerts.append((3, "검토", sid, sname, "입력 발주량 상한 초과", f"{r['sku']['planned']:,}개 입력 / {r['cap']:,}개 상한", False))
 
     for ev in st.session_state.events:
-        alerts.append((3, "변동", ev["sku"], ev["name"], ev["title"], ev["detail"]))
+        # 외부 확정 이벤트(변동)는 즉시 푸시 대상
+        all_alerts.append((1, "변동", ev["sku"], ev["name"], ev["title"], ev["detail"], True))
 
-    alerts.sort(key=lambda x: x[0])
+    all_alerts.sort(key=lambda x: x[0])
+
+    filter_mode = st.radio(
+        "알림 표시 범위",
+        ["즉시 발송 대상만 보기 (핵심 긴급 + 변동)", "전체 감지 경보 보기"],
+        index=0
+    )
+
+    visible_alerts = [a for a in all_alerts if a[6]] if "즉시 발송" in filter_mode else all_alerts
+    digest_cnt = sum(1 for a in all_alerts if not a[6])
 
     sc1, sc2 = st.columns(2)
-    if sc1.button("일괄 모의 전송", use_container_width=True):
-        for idx, _ in enumerate(alerts):
+    if sc1.button("즉시 푸시 발송", use_container_width=True):
+        push_targets = [i for i, a in enumerate(all_alerts) if a[6]]
+        for idx in push_targets:
             st.session_state.sent_alerts.add(idx)
-        st.success(f"{len(alerts)}건 전송 완료")
-    if sc2.button("미확인 재알림", use_container_width=True):
-        unread = [i for i in range(len(alerts)) if i in st.session_state.sent_alerts and i not in st.session_state.read_alerts]
-        st.info(f"미확인 {len(unread)}건 재알림 발송")
+        st.success(f"즉시 발송 대상 {len(push_targets)}건 전송 완료")
+    if sc2.button("일일 요약 발송", use_container_width=True):
+        st.info(f"주의·검토 {digest_cnt}건 일일 리포트 발송 완료")
 
+    st.caption(f"표시 중: **{len(visible_alerts)}건** (일일 요약 대기 {digest_cnt}건 제외)")
     st.divider()
-    for idx, (lvl, sev, sid, sname, title, detail) in enumerate(alerts):
-        cls_map = {0: "alert-red", 1: "alert-orange", 2: "alert-yellow", 3: "alert-blue"}
-        icon_map = {0: "🔴", 1: "🟠", 2: "🟡", 3: "🔵"}
-        status_txt = "확인완료" if idx in st.session_state.read_alerts else ("발송됨" if idx in st.session_state.sent_alerts else "대기")
+
+    # 최대 5건만 카드로 렌더링해 스크롤 과부하 방지
+    max_show = 5
+    for idx, (lvl, sev, sid, sname, title, detail, push_now) in enumerate(visible_alerts[:max_show]):
+        cls_map = {0: "alert-red", 1: "alert-blue", 2: "alert-orange", 3: "alert-yellow"}
+        icon_map = {0: "🔴", 1: "🔵", 2: "🟠", 3: "🟡"}
+        badge_txt = "즉시푸시" if push_now else "일일요약"
         st.markdown(f"""
         <div class="alert-card {cls_map[lvl]}">
-            <strong>{icon_map[lvl]} [{sev}] {title}</strong> · <span style="font-size:0.8rem;">({status_txt})</span><br>
+            <strong>{icon_map[lvl]} [{sev}] {title}</strong> · <span style="font-size:0.78rem;">({badge_txt})</span><br>
             <span style="font-weight:700;">{sid} ({sname})</span><br>
             {detail}
         </div>
         """, unsafe_allow_html=True)
 
+    if len(visible_alerts) > max_show:
+        st.info(f"외 **{len(visible_alerts) - max_show}건**이 더 있습니다. 전체 내역은 우측 'SKU별 발주 권고 결과표'에서 확인하세요.")
 # ---------------------------------------------------------
 # 6. 메인 탭 구성
 # ---------------------------------------------------------
