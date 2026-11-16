@@ -10,7 +10,7 @@ import plotly.express as px
 # 1. 페이지 기본 설정 및 직관적 커스텀 스타일
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="SCM 지능형 모의 발주 시스템 (DSS)",
+    page_title="셀러노트 모의 발주 시스템",
     page_icon="🚢",
     layout="wide",
     initial_sidebar_state="expanded"
