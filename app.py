@@ -329,7 +329,7 @@ results, elapsed_sec = evaluate_all(st.session_state.sku_data)
 st.markdown(f"""
 <div class="top-banner">
     <div>
-        <div class="brand-title">SELLERNOTE · 지능형 발주 프로그램</div>
+        <div class="brand-title">SELLERNOTE · 발주 프로그램</div>
         <div style="font-size:0.85rem; color:#CBE0D7; margin-top:2px;">기준일 {BASE_DATE.strftime('%Y-%m-%d')} · 관리 대상 SKU {len(st.session_state.sku_data)}개</div>
     </div>
     <div style="display:flex; gap:10px; align-items:center;">
