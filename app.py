@@ -93,6 +93,94 @@ def fmt_md(days: int) -> str:
 # ---------------------------------------------------------
 # 2. 초기 예시 데이터 구성
 # ---------------------------------------------------------
+import os
+
+FILE_FUTURE = "SKU별_관측이후_미래수요예측표_A_3.csv"
+FILE_WEEKLY = "SKU별_주차별_수요예측량_A_2.csv"
+
+def read_csv_safe(path):
+    for enc in ["utf-8-sig", "cp949", "utf-8", "euc-kr"]:
+        try:
+            df = pd.read_csv(path, encoding=enc)
+            df.columns = [c.replace("\ufeff", "").strip() for c in df.columns]
+            return df
+        except Exception:
+            continue
+    raise ValueError(f"파일 인코딩을 읽을 수 없습니다: {path}")
+
+@st.cache_data
+def load_real_sku_data():
+    if not os.path.exists(FILE_FUTURE) or not os.path.exists(FILE_WEEKLY):
+        st.error(f"'{FILE_FUTURE}' 또는 '{FILE_WEEKLY}' 파일을 찾을 수 없습니다. GitHub 저장소에 2개 CSV 파일을 업로드해 주세요.")
+        st.stop()
+
+    df_fut = read_csv_safe(FILE_FUTURE)
+    df_wk = read_csv_safe(FILE_WEEKLY)
+
+    # 1) 미래수요예측표에서 4주 기준 주당 평균 예측 수요 추출
+    fut_4w = df_fut[df_fut["예측 기간"].astype(str).str.contains("4")].copy()
+    if fut_4w.empty:
+        fut_4w = df_fut.groupby("SKU ID", as_index=False).first()
+    fut_map = dict(zip(
+        fut_4w["SKU ID"].astype(str).str.strip(),
+        fut_4w["주당 평균 예측 수요(PCS)"].astype(float)
+    ))
+
+    # 2) 주차별 수요예측량에서 52주 실적 및 예측 오차(잔차) 기반 P20/P95 산출
+    df_wk["SKU ID"] = df_wk["SKU ID"].astype(str).str.strip()
+    df_wk = df_wk.sort_values(["SKU ID", "주 시작일"])
+
+    sku_list = []
+    all_skus = list(dict.fromkeys(df_fut["SKU ID"].astype(str).str.strip().tolist()))
+
+    for idx, sid in enumerate(all_skus):
+        grp = df_wk[df_wk["SKU ID"] == sid]
+        ships = grp["총출고PCS"].fillna(0).tolist() if not grp.empty else [10, 10]
+        prev_ship = int(ships[-2]) if len(ships) >= 2 else int(ships[-1])
+        curr_ship = int(ships[-1]) if len(ships) >= 1 else 0
+
+        wk_mean = fut_map.get(sid, float(np.mean(ships[-4:])) if ships else 10.0)
+
+        # 실적과 맞춤형 예측치의 잔차 또는 최근 12주 출고 표준편차로 분위수(P20, P95) 계산
+        if not grp.empty and "선택_맞춤형예측_PCS" in grp.columns:
+            residuals = (grp["총출고PCS"] - grp["선택_맞춤형예측_PCS"]).dropna().tolist()
+            wk_std = float(np.std(residuals[-12:])) if len(residuals) >= 2 else wk_mean * 0.3
+        else:
+            wk_std = float(np.std(ships[-12:])) if len(ships) >= 2 else wk_mean * 0.3
+
+        mean_w = max(1, int(round(wk_mean)))
+        p20_w = max(0, int(round(mean_w - 0.84 * wk_std)))
+        p95_w = max(mean_w + 1, int(round(mean_w + 1.65 * wk_std)))
+
+        forecast = [[p20_w, mean_w, p95_w] for _ in range(4)]
+
+        # 재고·소비기한·리드타임 시뮬레이션 파라미터
+        cur_stock = max(mean_w * 2, curr_ship * 3)
+        shelf_life = 120 if idx % 3 != 1 else 35
+        sea_lt = 42 if idx % 2 == 0 else 49
+        air_lt = 7
+
+        sku_list.append({
+            "id": sid,
+            "name": f"품목 {sid}",
+            "forecast": forecast,
+            "ship": [prev_ship, curr_ship],
+            "lots": [{"id": f"{sid}-L1", "qty": cur_stock, "expiry": shelf_life, "deadline": shelf_life}],
+            "inbound": [{"mode": "해상", "day": 28, "qty": mean_w * 4, "expiry": shelf_life + 60, "deadline": shelf_life + 60}],
+            "b2b": [],
+            "planned": mean_w * 4,
+            "terms": {"air": air_lt, "sea": sea_lt, "window": max(30, shelf_life - 15), "review": 14, "leadSD": 5, "cycle": 30},
+            "costs": {"air": [0, 150000 if idx % 5 == 0 else 0], "sea": [310000, 320000]},
+            "records": [{
+                "request": -25, "accepted": -24, "depart": -15, "eta": 28,
+                "status": "운송 중", "mode": "해상", "route": "해외 선적항 → 한국 · 부산항",
+                "container": "20ft LCL", "load": "1.2 CBM", "cost": 320000, "vat": 32000
+            }]
+        })
+    return sku_list
+
+def get_initial_data():
+    return load_real_sku_data()
 def get_initial_data():
     return [
         {
@@ -304,33 +392,22 @@ results, elapsed_sec = evaluate_all(st.session_state.sku_data)
 # ---------------------------------------------------------
 # 4. 상단 배너 및 SKU 선택
 # ---------------------------------------------------------
-st.markdown(f"""
-<div class="top-banner">
-    <div>
-        <div class="brand-title">SELLERNOTE · 지능형 발주 프로그램</div>
-        <div style="font-size:0.85rem; color:#CBE0D7; margin-top:2px;">기준일 {BASE_DATE.strftime('%Y-%m-%d')} · 관리 대상 SKU {len(st.session_state.sku_data)}개</div>
-    </div>
-    <div style="display:flex; gap:10px; align-items:center;">
-        <span class="exec-badge"> {len(results)}개 SKU 계산 완료 · {elapsed_sec:.4f}초 ({elapsed_sec*1000:.1f}ms)</span>
-        <span class="demo-badge">발주 검토 대시보드</span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+default_id = "S2036649" if any(r["sku"]["id"] == "S2036649" for r in results) else results[0]["sku"]["id"]
 
 sku_query = st.text_input(
-    "SKU ID 직접 입력",
-    value=st.session_state.sku_data[0]["id"],
-    placeholder="예: SN-202 또는 오트밀"
+    f"검토할 SKU ID 직접 입력 (총 {len(results)}개 SKU 로드됨)",
+    value=default_id,
+    placeholder="예: S2036649"
 ).strip()
 
 matched_res = next(
-    (r for r in results if sku_query.lower() == r["sku"]["id"].lower()),
-    next((r for r in results if sku_query.lower() in r["sku"]["id"].lower() or sku_query.lower() in r["sku"]["name"].lower()), None)
+    (r for r in results if sku_query.upper() == r["sku"]["id"].upper()),
+    next((r for r in results if sku_query.upper() in r["sku"]["id"].upper()), None)
 )
 
 if matched_res is None:
-    st.warning(f"'{sku_query}'와 일치하는 SKU가 없어 기본 품목({results[0]['sku']['id']})을 표시합니다.")
-    active_res = results[0]
+    st.warning(f"입력하신 '{sku_query}'와 일치하는 SKU ID가 없습니다. 기본 SKU({default_id})를 표시합니다.")
+    active_res = next(r for r in results if r["sku"]["id"] == default_id)
 else:
     active_res = matched_res
 
