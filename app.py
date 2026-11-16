@@ -540,10 +540,10 @@ with tab1:
     st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
 
 # =========================================================
-# [탭 2] 소비기한 (문제 2)
+# [탭 2] 소비기한 (문제 2) — 상·하한 음영 밴드 + 주차별 직관 차트
 # =========================================================
 with tab2:
-    st.subheader(f"로트별 소비기한(FEFO) 소진 및 신규 발주 상한 — [{active_sku['id']} {active_sku['name']}]")
+    st.subheader(f"⏳ 문제 2 · 로트별 소비기한(FEFO) 소진 및 신규 발주 상한 — [{active_sku['id']} {active_sku['name']}]")
     t = active_sku["terms"]
 
     e1, e2, e3 = st.columns(3)
@@ -563,47 +563,140 @@ with tab2:
     ])
     st.dataframe(lot_df, use_container_width=True, hide_index=True)
 
-    end_d = max(1, t["sea"] + t["window"])
-    days_x = [fmt_md(d) for d in range(end_d + 1)]
-    mean_y = [active_res["mean"]["lines"][d][0] for d in range(end_d + 1)]
-    p20_y = [active_res["p20"]["lines"][d][0] for d in range(end_d + 1)]
+    # 실제 날짜 객체(datetime) 사용으로 연도 변경 시 선 꺾임 현상 완전 해결
+    end_d = max(7, t["sea"] + t["window"])
+    step = 7  # 주 단위(1주 후, 2주 후...)로 깔끔하게 표시
+    sample_days = list(range(0, end_d + 1, step))
+    if sample_days[-1] != end_d:
+        sample_days.append(end_d)
+
+    dates_x = [BASE_DATE + datetime.timedelta(days=d) for d in sample_days]
+    tick_labels = [f"{d//7}주 후<br>({fmt_md(d)})" if d > 0 else f"기준일<br>({fmt_md(0)})" for d in sample_days]
+
+    p20_y = [round(active_res["p20"]["lines"][d][0], 1) for d in sample_days]
+    mean_y = [round(active_res["mean"]["lines"][d][0], 1) for d in sample_days]
+    p95_y = [round(active_res["p95"]["lines"][d][0], 1) for d in sample_days]
 
     fig_exp = go.Figure()
-    fig_exp.add_trace(go.Scatter(x=days_x, y=mean_y, mode="lines", name="예상 평균 누적수요", line=dict(color="#087762", width=3)))
-    fig_exp.add_trace(go.Scatter(x=days_x, y=p20_y, mode="lines", name="보수적 하한(P20) 누적수요", line=dict(color="#A75524", width=2.5, dash="dash")))
-    fig_exp.add_vline(x=t["sea"], line_dash="dot", line_color="#2563EB", annotation_text="신규 입고일")
-    fig_exp.add_vline(x=t["sea"] + t["window"], line_dash="dash", line_color="#D93025", annotation_text="판매 마감일")
-    fig_exp.update_layout(title="평균 및 하한(P20) 누적 수요 추이 (FEFO 기준)", xaxis_title="날짜", yaxis_title="누적 수량 (개)", height=400)
+    # 상한선(P95) 투명 경계
+    fig_exp.add_trace(go.Scatter(
+        x=dates_x, y=p95_y, mode="lines", line=dict(width=0),
+        showlegend=False, hoverinfo="skip"
+    ))
+    # 하한선(P20) ~ 상한선(P95) 사이 반투명 민트 음영 밴드
+    fig_exp.add_trace(go.Scatter(
+        x=dates_x, y=p20_y, mode="lines",
+        line=dict(color="rgba(9, 99, 81, 0.35)", width=1.5, dash="dot"),
+        fill="tonexty", fillcolor="rgba(9, 99, 81, 0.14)",
+        name="수요 예측 상·하한 범위 (P20 ~ P95)"
+    ))
+    # 중심 평균선
+    fig_exp.add_trace(go.Scatter(
+        x=dates_x, y=mean_y, mode="lines+markers",
+        line=dict(color="#096351", width=3.5),
+        marker=dict(size=7, color="#096351"),
+        name="주간 누적 예측 평균값"
+    ))
+
+    # 주요 일정 수직선 (datetime 좌표 사용)
+    sea_dt = BASE_DATE + datetime.timedelta(days=t["sea"])
+    end_dt = BASE_DATE + datetime.timedelta(days=t["sea"] + t["window"])
+    fig_exp.add_vline(x=sea_dt, line_dash="dot", line_color="#2563EB", line_width=2)
+    fig_exp.add_annotation(x=sea_dt, y=1.06, yref="paper", text=f"신규 해상 입고 ({fmt_md(t['sea'])})", showarrow=False, font=dict(color="#2563EB", size=12))
+
+    fig_exp.add_vline(x=end_dt, line_dash="dash", line_color="#D93025", line_width=2)
+    fig_exp.add_annotation(x=end_dt, y=1.06, yref="paper", text=f"판매 마감일 ({fmt_md(t['sea']+t['window'])})", showarrow=False, font=dict(color="#D93025", size=12))
+
+    fig_exp.update_layout(
+        title="주차별 누적 수요 예측(평균 및 상·하한 밴드)과 판매 마감 시점",
+        xaxis=dict(tickmode="array", tickvals=dates_x[::2], ticktext=tick_labels[::2], showgrid=False),
+        yaxis=dict(title="누적 수량 (개)", gridcolor="#E6ECE9", zeroline=True, zerolinecolor="#D9E5DF"),
+        plot_bgcolor="white",
+        height=420,
+        margin=dict(t=65, b=40, l=50, r=30),
+        legend=dict(orientation="h", yanchor="bottom", y=1.12, xanchor="left", x=0)
+    )
     st.plotly_chart(fig_exp, use_container_width=True)
+    st.caption("연한 초록색 음영은 보수적 하한(P20)부터 상한(P95)까지의 누적 수요 예측 구간입니다. 하한선(점선)이 기존 로트 재고량보다 낮으면 판매 마감일까지 미소진 폐기 물량이 발생합니다.")
 
 # =========================================================
-# [탭 3] 운송 수단 (문제 3)
+# [탭 3] 운송 수단 (문제 3) — 상·하한 음영 밴드 + 가용 공급 계단선 비교
 # =========================================================
 with tab3:
-    st.subheader(f"항공 및 해상 입고 전 품절 위험 분석 — [{active_sku['id']} {active_sku['name']}]")
+    st.subheader(f"✈️ 문제 3 · 항공 및 해상 입고 전 품절 위험 분석 — [{active_sku['id']} {active_sku['name']}]")
 
     tr1, tr2, tr3 = st.columns(3)
     tr1.metric("항공 검토 입고일 / 해상 입고일", f"{fmt_md(active_res['air'])} / {fmt_md(active_res['seaDay'])}", delta="리드타임 비교 기준", delta_color="off")
     tr2.metric("최초 품절 예상 시점 (P95)", "해상 입고 전 없음" if active_res["first"] is None else f"{fmt_md(active_res['first'])} ({active_res['first']//7 + 1}주차)", delta="안전 상한 돌파 시점", delta_color="inverse" if active_res["first"] is not None else "normal")
     tr3.metric("긴급 항공 추가 투입 권고량", f"{active_res['airQty']:,}개", delta="해상 도착 전 품절 방어분", delta_color="inverse" if active_res["airQty"] > 0 else "off")
 
-    end_tr = max(1, active_res["air"], active_res["seaDay"])
-    days_tr = [fmt_md(d) for d in range(end_tr + 1)]
-    mean_tr = [active_res["mean"]["lines"][d][0] for d in range(end_tr + 1)]
-    p95_dem = [active_res["p95"]["lines"][d][0] for d in range(end_tr + 1)]
-    p95_sup = [active_res["p95"]["lines"][d][1] for d in range(end_tr + 1)]
+    end_tr = max(7, active_res["air"], active_res["seaDay"])
+    tr_days = list(range(0, end_tr + 1))
+    tr_dates = [BASE_DATE + datetime.timedelta(days=d) for d in tr_days]
+
+    # x축 눈금은 1주(7일) 간격으로 깔끔하게 표시
+    tick_days_tr = list(range(0, end_tr + 1, 7))
+    if tick_days_tr[-1] != end_tr:
+        tick_days_tr.append(end_tr)
+    tick_dates_tr = [BASE_DATE + datetime.timedelta(days=d) for d in tick_days_tr]
+    tick_labels_tr = [f"{d//7}주 후<br>({fmt_md(d)})" if d > 0 else f"기준일<br>({fmt_md(0)})" for d in tick_days_tr]
+
+    p20_tr = [round(active_res["p20"]["lines"][d][0], 1) for d in tr_days]
+    mean_tr = [round(active_res["mean"]["lines"][d][0], 1) for d in tr_days]
+    p95_dem = [round(active_res["p95"]["lines"][d][0], 1) for d in tr_days]
+    p95_sup = [round(active_res["p95"]["lines"][d][1], 1) for d in tr_days]
 
     fig_tr = go.Figure()
-    fig_tr.add_trace(go.Scatter(x=days_tr, y=p95_dem, mode="lines", name="상한(P95) 누적 수요", line=dict(color="#843EA0", width=3)))
-    fig_tr.add_trace(go.Scatter(x=days_tr, y=mean_tr, mode="lines", name="평균 누적 수요", line=dict(color="#087762", width=2.5, dash="dash")))
-    fig_tr.add_trace(go.Scatter(x=days_tr, y=p95_sup, mode="lines", name="P95 기준 누적 가용 공급", line=dict(color="#355584", width=3)))
-    fig_tr.add_vline(x=active_res["air"], line_dash="dot", line_color="#2563EB", annotation_text="항공 검토 입고")
-    fig_tr.add_vline(x=active_res["seaDay"], line_dash="dash", line_color="#7C3AED", annotation_text="해상 입고")
-    if active_res["first"] is not None:
-        fig_tr.add_vline(x=active_res["first"], line_dash="solid", line_color="#D93025", annotation_text="최초 부족 발생")
-    fig_tr.update_layout(title="항공 및 해상 입고까지의 수요와 공급 비교 (P95 스파이크 방어)", xaxis_title="날짜", yaxis_title="누적 수량 (개)", height=410)
-    st.plotly_chart(fig_tr, use_container_width=True)
+    # 상한(P95) 경계선
+    fig_tr.add_trace(go.Scatter(
+        x=tr_dates, y=p95_dem, mode="lines",
+        line=dict(color="rgba(9, 99, 81, 0.45)", width=1.5, dash="dot"),
+        name="수요 상한 (P95 · 스파이크 기준)"
+    ))
+    # 하한(P20) ~ 상한(P95) 음영 밴드
+    fig_tr.add_trace(go.Scatter(
+        x=tr_dates, y=p20_tr, mode="lines", line=dict(width=0),
+        fill="tonexty", fillcolor="rgba(9, 99, 81, 0.14)",
+        name="수요 예측 상·하한 구간"
+    ))
+    # 평균 누적 수요
+    fig_tr.add_trace(go.Scatter(
+        x=tr_dates, y=mean_tr, mode="lines",
+        line=dict(color="#096351", width=3.5),
+        name="평균 누적 수요"
+    ))
+    # 누적 가용 공급 (계단형)
+    fig_tr.add_trace(go.Scatter(
+        x=tr_dates, y=p95_sup, mode="lines",
+        line=dict(color="#2563EB", width=3, shape="hv"),
+        name="누적 가용 공급 (현재재고 + 예정입고)"
+    ))
 
+    air_dt = BASE_DATE + datetime.timedelta(days=active_res["air"])
+    sea_tr_dt = BASE_DATE + datetime.timedelta(days=active_res["seaDay"])
+
+    fig_tr.add_vline(x=air_dt, line_dash="dot", line_color="#0284C7", line_width=2)
+    fig_tr.add_annotation(x=air_dt, y=1.06, yref="paper", text=f"항공 입고 가능일 ({fmt_md(active_res['air'])})", showarrow=False, font=dict(color="#0284C7", size=12))
+
+    fig_tr.add_vline(x=sea_tr_dt, line_dash="dash", line_color="#7C3AED", line_width=2)
+    fig_tr.add_annotation(x=sea_tr_dt, y=1.06, yref="paper", text=f"해상 입고일 ({fmt_md(active_res['seaDay'])})", showarrow=False, font=dict(color="#7C3AED", size=12))
+
+    if active_res["first"] is not None:
+        first_dt = BASE_DATE + datetime.timedelta(days=active_res["first"])
+        fig_tr.add_vline(x=first_dt, line_dash="solid", line_color="#D93025", line_width=2)
+        fig_tr.add_annotation(x=first_dt, y=0.92, yref="paper", text=f"최초 품절 ({fmt_md(active_res['first'])})", showarrow=False, bgcolor="#FCE5E4", font=dict(color="#D93025", size=12))
+
+    fig_tr.update_layout(
+        title="리드타임 구간 내 수요 예측(평균 및 상·하한) vs 누적 가용 공급 비교",
+        xaxis=dict(tickmode="array", tickvals=tick_dates_tr, ticktext=tick_labels_tr, showgrid=False),
+        yaxis=dict(title="누적 수량 (개)", gridcolor="#E6ECE9", zeroline=True, zerolinecolor="#D9E5DF"),
+        plot_bgcolor="white",
+        height=430,
+        margin=dict(t=65, b=40, l=50, r=30),
+        legend=dict(orientation="h", yanchor="bottom", y=1.12, xanchor="left", x=0)
+    )
+    st.plotly_chart(fig_tr, use_container_width=True)
+    st.caption("파란색 계단선(누적 가용 공급)이 초록색 점선(수요 상한 P95) 아래로 내려가는 지점이 최초 품절 예상 시점이며, 항공 입고일부터 해상 입고 전날까지의 부족분이 항공 긴급 투입 권고량입니다.")
 # =========================================================
 # [탭 4] SKU 발주 상태
 # =========================================================
