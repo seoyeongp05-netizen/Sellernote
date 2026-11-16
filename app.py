@@ -543,7 +543,7 @@ with tab1:
 # [탭 2] 소비기한 (문제 2) — 상·하한 음영 밴드 + 주차별 직관 차트
 # =========================================================
 with tab2:
-    st.subheader(f"⏳ 문제 2 · 로트별 소비기한(FEFO) 소진 및 신규 발주 상한 — [{active_sku['id']} {active_sku['name']}]")
+    st.subheader(f"로트별 소비기한(FEFO) 소진 및 신규 발주 상한 — [{active_sku['id']} {active_sku['name']}]")
     t = active_sku["terms"]
 
     e1, e2, e3 = st.columns(3)
@@ -623,7 +623,7 @@ with tab2:
 # [탭 3] 운송 수단 (문제 3) — 상·하한 음영 밴드 + 가용 공급 계단선 비교
 # =========================================================
 with tab3:
-    st.subheader(f"✈️ 문제 3 · 항공 및 해상 입고 전 품절 위험 분석 — [{active_sku['id']} {active_sku['name']}]")
+    st.subheader(f"항공 및 해상 입고 전 품절 위험 분석 — [{active_sku['id']} {active_sku['name']}]")
 
     tr1, tr2, tr3 = st.columns(3)
     tr1.metric("항공 검토 입고일 / 해상 입고일", f"{fmt_md(active_res['air'])} / {fmt_md(active_res['seaDay'])}", delta="리드타임 비교 기준", delta_color="off")
