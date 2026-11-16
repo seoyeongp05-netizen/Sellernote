@@ -656,9 +656,16 @@ with tab2:
     dates_x = [BASE_DATE + datetime.timedelta(days=d) for d in sample_days]
     tick_labels = [f"{d//7}주 후<br>({fmt_md(d)})" if d > 0 else f"기준일<br>({fmt_md(0)})" for d in sample_days]
 
+    # 희망 발주량을 반영한 시뮬레이션 계산 (신규 해상 입고일 도착 기준)
+    planned_qty = int(active_sku["planned"])
+    planned_lot = [{"id": "희망 신규 발주", "qty": planned_qty, "day": t["sea"], "deadline": t["sea"] + t["window"]}]
+    sim_with_plan = simulate(active_sku, 1, extra=planned_lot, horizon=end_d + 1)
+
     p20_y = [round(active_res["p20"]["lines"][d][0], 1) for d in sample_days]
     mean_y = [round(active_res["mean"]["lines"][d][0], 1) for d in sample_days]
     p95_y = [round(active_res["p95"]["lines"][d][0], 1) for d in sample_days]
+    base_sup_y = [round(active_res["mean"]["lines"][d][1], 1) for d in sample_days]
+    plan_sup_y = [round(sim_with_plan["lines"][d][1], 1) for d in sample_days]
 
     fig_exp = go.Figure()
     # 상한선(P95) 투명 경계
@@ -671,14 +678,26 @@ with tab2:
         x=dates_x, y=p20_y, mode="lines",
         line=dict(color="rgba(9, 99, 81, 0.35)", width=1.5, dash="dot"),
         fill="tonexty", fillcolor="rgba(9, 99, 81, 0.14)",
-        name="수요 예측 상·하한 범위 (P20 ~ P95)"
+        name="수요 예측 범위 (P20~P95)"
     ))
     # 중심 평균선
     fig_exp.add_trace(go.Scatter(
         x=dates_x, y=mean_y, mode="lines+markers",
         line=dict(color="#096351", width=3.5),
-        marker=dict(size=7, color="#096351"),
-        name="주간 누적 예측 평균값"
+        marker=dict(size=6, color="#096351"),
+        name="누적 예측 수요(평균)"
+    ))
+    # 기존 보유·예정 공급선
+    fig_exp.add_trace(go.Scatter(
+        x=dates_x, y=base_sup_y, mode="lines",
+        line=dict(color="#64748B", width=2, dash="dash", shape="hv"),
+        name="기존 가용 공급(재고+입고)"
+    ))
+    # 담당자 희망 발주량 포함 공급선
+    fig_exp.add_trace(go.Scatter(
+        x=dates_x, y=plan_sup_y, mode="lines",
+        line=dict(color="#EA580C", width=3, shape="hv"),
+        name=f"희망 발주({planned_qty:,}개) 반영 공급"
     ))
 
     # 주요 일정 수직선 (datetime 좌표 사용)
@@ -724,23 +743,44 @@ with tab3:
     tick_dates_tr = [BASE_DATE + datetime.timedelta(days=d) for d in tick_days_tr]
     tick_labels_tr = [f"{d//7}주 후<br>({fmt_md(d)})" if d > 0 else f"기준일<br>({fmt_md(0)})" for d in tick_days_tr]
 
+    # 희망 발주량 반영 시뮬레이션 (리드타임 구간 비교용)
+    t_tr = active_sku["terms"]
+    planned_qty_tr = int(active_sku["planned"])
+    end_tr = max(7, active_res["air"], active_res["seaDay"], t_tr["sea"])
+    tr_days = list(range(0, end_tr + 1))
+    tr_dates = [BASE_DATE + datetime.timedelta(days=d) for d in tr_days]
+
+    tick_days_tr = list(range(0, end_tr + 1, 7))
+    if tick_days_tr[-1] != end_tr:
+        tick_days_tr.append(end_tr)
+    tick_dates_tr = [BASE_DATE + datetime.timedelta(days=d) for d in tick_days_tr]
+    tick_labels_tr = [f"{d//7}주 후<br>({fmt_md(d)})" if d > 0 else f"기준일<br>({fmt_md(0)})" for d in tick_days_tr]
+
+    sim_base_tr = simulate(active_sku, 2, horizon=end_tr + 1)
+    sim_plan_tr = simulate(
+        active_sku, 2,
+        extra=[{"id": "희망 신규 발주", "qty": planned_qty_tr, "day": t_tr["sea"], "deadline": t_tr["sea"] + t_tr["window"]}],
+        horizon=end_tr + 1
+    )
+
     p20_tr = [round(active_res["p20"]["lines"][d][0], 1) for d in tr_days]
     mean_tr = [round(active_res["mean"]["lines"][d][0], 1) for d in tr_days]
-    p95_dem = [round(active_res["p95"]["lines"][d][0], 1) for d in tr_days]
-    p95_sup = [round(active_res["p95"]["lines"][d][1], 1) for d in tr_days]
+    p95_dem = [round(sim_base_tr["lines"][d][0], 1) for d in tr_days]
+    p95_sup = [round(sim_base_tr["lines"][d][1], 1) for d in tr_days]
+    plan_sup_tr = [round(sim_plan_tr["lines"][d][1], 1) for d in tr_days]
 
     fig_tr = go.Figure()
     # 상한(P95) 경계선
     fig_tr.add_trace(go.Scatter(
         x=tr_dates, y=p95_dem, mode="lines",
         line=dict(color="rgba(9, 99, 81, 0.45)", width=1.5, dash="dot"),
-        name="수요 상한 (P95 · 스파이크 기준)"
+        name="수요 상한 (P95)"
     ))
     # 하한(P20) ~ 상한(P95) 음영 밴드
     fig_tr.add_trace(go.Scatter(
         x=tr_dates, y=p20_tr, mode="lines", line=dict(width=0),
         fill="tonexty", fillcolor="rgba(9, 99, 81, 0.14)",
-        name="수요 예측 상·하한 구간"
+        name="수요 예측 구간"
     ))
     # 평균 누적 수요
     fig_tr.add_trace(go.Scatter(
@@ -748,11 +788,17 @@ with tab3:
         line=dict(color="#096351", width=3.5),
         name="평균 누적 수요"
     ))
-    # 누적 가용 공급 (계단형)
+    # 기존 누적 가용 공급 (파란색 계단형)
     fig_tr.add_trace(go.Scatter(
         x=tr_dates, y=p95_sup, mode="lines",
         line=dict(color="#2563EB", width=3, shape="hv"),
-        name="누적 가용 공급 (현재재고 + 예정입고)"
+        name="기존 가용 공급"
+    ))
+    # 희망 발주량 반영 공급 (주황색 점선 계단형)
+    fig_tr.add_trace(go.Scatter(
+        x=tr_dates, y=plan_sup_tr, mode="lines",
+        line=dict(color="#EA580C", width=3, dash="dash", shape="hv"),
+        name=f"희망 발주({planned_qty_tr:,}개) 반영 공급"
     ))
 
     air_dt = BASE_DATE + datetime.timedelta(days=active_res["air"])
