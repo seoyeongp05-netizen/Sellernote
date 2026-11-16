@@ -608,13 +608,13 @@ with tab2:
     fig_exp.add_annotation(x=end_dt, y=1.06, yref="paper", text=f"판매 마감일 ({fmt_md(t['sea']+t['window'])})", showarrow=False, font=dict(color="#D93025", size=12))
 
     fig_exp.update_layout(
-        title="주차별 누적 수요 예측(평균 및 상·하한 밴드)과 판매 마감 시점",
+        title=dict(text="주차별 누적 수요 예측(평균 및 상·하한 밴드)과 판매 마감 시점", y=0.96),
         xaxis=dict(tickmode="array", tickvals=dates_x[::2], ticktext=tick_labels[::2], showgrid=False),
         yaxis=dict(title="누적 수량 (개)", gridcolor="#E6ECE9", zeroline=True, zerolinecolor="#D9E5DF"),
         plot_bgcolor="white",
-        height=420,
-        margin=dict(t=65, b=40, l=50, r=30),
-        legend=dict(orientation="h", yanchor="bottom", y=1.12, xanchor="left", x=0)
+        height=450,
+        margin=dict(t=105, b=40, l=50, r=30),
+        legend=dict(orientation="h", yanchor="bottom", y=1.13, xanchor="left", x=0)
     )
     st.plotly_chart(fig_exp, use_container_width=True)
     st.caption("연한 초록색 음영은 보수적 하한(P20)부터 상한(P95)까지의 누적 수요 예측 구간입니다. 하한선(점선)이 기존 로트 재고량보다 낮으면 판매 마감일까지 미소진 폐기 물량이 발생합니다.")
@@ -687,13 +687,13 @@ with tab3:
         fig_tr.add_annotation(x=first_dt, y=0.92, yref="paper", text=f"최초 품절 ({fmt_md(active_res['first'])})", showarrow=False, bgcolor="#FCE5E4", font=dict(color="#D93025", size=12))
 
     fig_tr.update_layout(
-        title="리드타임 구간 내 수요 예측(평균 및 상·하한) vs 누적 가용 공급 비교",
+        title=dict(text="리드타임 구간 내 수요 예측(평균 및 상·하한) vs 누적 가용 공급 비교", y=0.96),
         xaxis=dict(tickmode="array", tickvals=tick_dates_tr, ticktext=tick_labels_tr, showgrid=False),
         yaxis=dict(title="누적 수량 (개)", gridcolor="#E6ECE9", zeroline=True, zerolinecolor="#D9E5DF"),
         plot_bgcolor="white",
-        height=430,
-        margin=dict(t=65, b=40, l=50, r=30),
-        legend=dict(orientation="h", yanchor="bottom", y=1.12, xanchor="left", x=0)
+        height=460,
+        margin=dict(t=105, b=40, l=50, r=30),
+        legend=dict(orientation="h", yanchor="bottom", y=1.13, xanchor="left", x=0)
     )
     st.plotly_chart(fig_tr, use_container_width=True)
     st.caption("파란색 계단선(누적 가용 공급)이 초록색 점선(수요 상한 P95) 아래로 내려가는 지점이 최초 품절 예상 시점이며, 항공 입고일부터 해상 입고 전날까지의 부족분이 항공 긴급 투입 권고량입니다.")
