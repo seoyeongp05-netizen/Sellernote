@@ -181,73 +181,7 @@ def load_real_sku_data():
 
 def get_initial_data():
     return load_real_sku_data()
-def get_initial_data():
-    return [
-        {
-            "id": "SN-101", "name": "쯔유 500 mL",
-            "forecast": [[75, 112, 315], [80, 118, 330], [78, 116, 320], [81, 120, 310]],
-            "ship": [105, 118],
-            "lots": [
-                {"id": "YY-01", "qty": 110, "expiry": 22, "deadline": 22},
-                {"id": "YY-02", "qty": 290, "expiry": 122, "deadline": 122}
-            ],
-            "inbound": [{"mode": "해상", "day": 34, "qty": 420, "expiry": 170, "deadline": 170}],
-            "b2b": [{"day": 6, "qty": 80}],
-            "planned": 300,
-            "terms": {"air": 6, "sea": 42, "window": 100, "review": 14, "leadSD": 5, "cycle": 30},
-            "costs": {"air": [0, 140000], "sea": [310000, 320000]},
-            "records": [{
-                "request": -30, "accepted": -29, "depart": -20, "eta": 34,
-                "status": "운송 중", "mode": "해상", "route": "일본 · 오사카항 → 한국 · 부산항",
-                "container": "20ft LCL", "load": "1.2 CBM", "cost": 320000, "vat": 32000
-            }]
-        },
-        {
-            "id": "SN-202", "name": "롤드 오트밀 500 g",
-            "forecast": [[42, 64, 83], [46, 69, 91], [44, 66, 90], [42, 65, 86]],
-            "ship": [75, 62],
-            "lots": [
-                {"id": "OT-01", "qty": 310, "expiry": 11, "deadline": 11},
-                {"id": "OT-02", "qty": 250, "expiry": 130, "deadline": 130}
-            ],
-            "inbound": [{"mode": "해상", "day": 30, "qty": 280, "expiry": 120, "deadline": 120}],
-            "b2b": [],
-            "planned": 480,
-            "terms": {"air": 8, "sea": 52, "window": 55, "review": 14, "leadSD": 8, "cycle": 30},
-            "costs": {"air": [0, 0], "sea": [400000, 0]},
-            "records": [{
-                "request": -35, "accepted": -34, "depart": -25, "eta": 30,
-                "status": "운송 중", "mode": "해상", "route": "폴란드 · 그단스크항 → 한국 · 부산항",
-                "container": "20ft LCL", "load": "1.8 CBM", "cost": 410000, "vat": 41000
-            }]
-        },
-        {
-            "id": "SN-303", "name": "트러플 오일 250 mL",
-            "forecast": [[25, 44, 62], [29, 46, 65], [27, 45, 63], [30, 48, 67]],
-            "ship": [41, 45],
-            "lots": [{"id": "TR-01", "qty": 300, "expiry": 150, "deadline": 150}],
-            "inbound": [
-                {"mode": "항공", "day": 12, "qty": 160, "expiry": 130, "deadline": 130},
-                {"mode": "해상", "day": 49, "qty": 40, "expiry": 180, "deadline": 180}
-            ],
-            "b2b": [],
-            "planned": 60,
-            "terms": {"air": 7, "sea": 56, "window": 70, "review": 14, "leadSD": 6, "cycle": 30},
-            "costs": {"air": [220000, 155000], "sea": [0, 290000]},
-            "records": [
-                {
-                    "request": -10, "accepted": -9, "depart": -4, "eta": 12,
-                    "status": "운송 중", "mode": "항공", "route": "이탈리아 · 밀라노 공항 → 한국 · 인천공항",
-                    "container": "항공 혼재", "load": "64 kg", "cost": 155000, "vat": 15500
-                },
-                {
-                    "request": -28, "accepted": -27, "depart": -18, "eta": 49,
-                    "status": "운송 중", "mode": "해상", "route": "이탈리아 · 제노바항 → 한국 · 부산항",
-                    "container": "20ft LCL", "load": "0.9 CBM", "cost": 290000, "vat": 29000
-                }
-            ]
-        }
-    ]
+
 
 if "sku_data" not in st.session_state:
     st.session_state.sku_data = get_initial_data()
@@ -392,6 +326,19 @@ results, elapsed_sec = evaluate_all(st.session_state.sku_data)
 # ---------------------------------------------------------
 # 4. 상단 배너 및 SKU 선택
 # ---------------------------------------------------------
+st.markdown(f"""
+<div class="top-banner">
+    <div>
+        <div class="brand-title">SELLERNOTE · 지능형 발주 프로그램</div>
+        <div style="font-size:0.85rem; color:#CBE0D7; margin-top:2px;">기준일 {BASE_DATE.strftime('%Y-%m-%d')} · 관리 대상 SKU {len(st.session_state.sku_data)}개</div>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+        <span class="exec-badge"> {len(results)}개 SKU 계산 완료 · {elapsed_sec:.4f}초 ({elapsed_sec*1000:.1f}ms)</span>
+        <span class="demo-badge">발주 검토 대시보드</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
 default_id = "S2036649" if any(r["sku"]["id"] == "S2036649" for r in results) else results[0]["sku"]["id"]
 
 sku_query = st.text_input(
