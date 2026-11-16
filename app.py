@@ -95,8 +95,8 @@ def fmt_md(days: int) -> str:
 # ---------------------------------------------------------
 import os
 
-FILE_FUTURE = "SKU별_관측이후_미래수요예측표_A_3.csv"
-FILE_WEEKLY = "SKU별_주차별_수요예측량_A_2.csv"
+FILE_FUTURE = "SKU별_관측이후_미래수요예측표_A.csv"
+FILE_WEEKLY = "SKU별_주차별_수요예측량_A.csv"
 
 def read_csv_safe(path):
     for enc in ["utf-8-sig", "cp949", "utf-8", "euc-kr"]:
