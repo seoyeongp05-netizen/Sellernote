@@ -456,7 +456,7 @@ with tab1:
     # 직관적인 발주 조건 및 변동 시뮬레이션 입력창
     col_in_head, col_reset = st.columns([4, 1])
     with col_in_head:
-        st.subheader(f"발주 조건 및 변동 시뮬레이션 입력 — [{active_sku['id']}]")
+        st.subheader(f"발주 조건 및 변동 시뮬레이션 입력 — [{active_sku['id']} {active_sku['name']}]")
         st.caption("기준일(2026.11.16)로부터 며칠 뒤인지(D+일)를 입력하면 실제 달력 날짜가 옆에 자동으로 표시됩니다.")
     with col_reset:
         if st.button("초기 예시값 복원", use_container_width=True):
@@ -578,7 +578,7 @@ with tab1:
 # [탭 2] 소비기한 (문제 2) — 상·하한 음영 밴드 + 주차별 직관 차트
 # =========================================================
 with tab2:
-    st.subheader(f"로트별 소비기한(FEFO) 소진 및 신규 발주 상한 — [{active_sku['id']}]")
+    st.subheader(f"로트별 소비기한(FEFO) 소진 및 신규 발주 상한 — [{active_sku['id']} {active_sku['name']}]")
     t = active_sku["terms"]
 
     e1, e2, e3 = st.columns(3)
@@ -658,7 +658,7 @@ with tab2:
 # [탭 3] 운송 수단 (문제 3) — 상·하한 음영 밴드 + 가용 공급 계단선 비교
 # =========================================================
 with tab3:
-    st.subheader(f"항공 및 해상 입고 전 품절 위험 분석 — [{active_sku['id']}]")
+    st.subheader(f"항공 및 해상 입고 전 품절 위험 분석 — [{active_sku['id']} {active_sku['name']}]")
 
     tr1, tr2, tr3 = st.columns(3)
     tr1.metric("항공 검토 입고일 / 해상 입고일", f"{fmt_md(active_res['air'])} / {fmt_md(active_res['seaDay'])}", delta="리드타임 비교 기준", delta_color="off")
