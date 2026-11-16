@@ -351,7 +351,7 @@ with st.sidebar:
     alerts.sort(key=lambda x: x[0])
 
     sc1, sc2 = st.columns(2)
-    if sc1.button("📨 일괄 모의 전송", use_container_width=True):
+    if sc1.button("일괄 모의 전송", use_container_width=True):
         for idx, _ in enumerate(alerts):
             st.session_state.sent_alerts.add(idx)
         st.success(f"{len(alerts)}건 전송 완료")
@@ -531,10 +531,10 @@ with tab1:
             "SKU ID": r["sku"]["id"],
             "품목명": r["sku"]["name"],
             "권고 발주량": f"{r['recommend']:,}개",
-            "문제 2 · 만료 예상 폐기량": f"{r['waste']:,}개",
-            "문제 2 · 신규 발주 상한": f"{r['cap']:,}개",
-            "문제 3 · 최초 품절 예상": "품절 없음" if r["first"] is None else f"{r['first']//7 + 1}주차 ({fmt_md(r['first'])})",
-            "문제 3 · 항공 긴급 투입량": f"{r['airQty']:,}개"
+            "만료 예상 폐기량": f"{r['waste']:,}개",
+            "신규 발주 상한": f"{r['cap']:,}개",
+            "최초 품절 예상": "품절 없음" if r["first"] is None else f"{r['first']//7 + 1}주차 ({fmt_md(r['first'])})",
+            "항공 긴급 투입량": f"{r['airQty']:,}개"
         })
 
     st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
