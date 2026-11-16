@@ -646,81 +646,80 @@ with tab2:
     ])
     st.dataframe(lot_df, use_container_width=True, hide_index=True)
 
-    # 실제 날짜 객체(datetime) 사용으로 연도 변경 시 선 꺾임 현상 완전 해결
+    # 직관적 비교: 기간별 누적 판매 가능량(P20·평균) vs 현재재고·예정입고·희망발주
     end_d = max(7, t["sea"] + t["window"])
-    step = 7  # 주 단위(1주 후, 2주 후...)로 깔끔하게 표시
-    sample_days = list(range(0, end_d + 1, step))
+    sample_days = list(range(0, end_d + 1, 7))
     if sample_days[-1] != end_d:
         sample_days.append(end_d)
 
     dates_x = [BASE_DATE + datetime.timedelta(days=d) for d in sample_days]
     tick_labels = [f"{d//7}주 후<br>({fmt_md(d)})" if d > 0 else f"기준일<br>({fmt_md(0)})" for d in sample_days]
 
-    # 희망 발주량을 반영한 시뮬레이션 계산 (신규 해상 입고일 도착 기준)
-    planned_qty = int(active_sku["planned"])
-    planned_lot = [{"id": "희망 신규 발주", "qty": planned_qty, "day": t["sea"], "deadline": t["sea"] + t["window"]}]
-    sim_with_plan = simulate(active_sku, 1, extra=planned_lot, horizon=end_d + 1)
-
     p20_y = [round(active_res["p20"]["lines"][d][0], 1) for d in sample_days]
     mean_y = [round(active_res["mean"]["lines"][d][0], 1) for d in sample_days]
-    p95_y = [round(active_res["p95"]["lines"][d][0], 1) for d in sample_days]
-    base_sup_y = [round(active_res["mean"]["lines"][d][1], 1) for d in sample_days]
-    plan_sup_y = [round(sim_with_plan["lines"][d][1], 1) for d in sample_days]
+
+    # 시간 흐름에 따른 단순 누적 입고량 (폐기 차감 없이 총 투입 물량만 표시해 직관성 확보)
+    cur_total = sum(l["qty"] for l in active_sku["lots"])
+    planned_qty = int(active_sku["planned"])
+
+    base_cum_in = []
+    plan_cum_in = []
+    for d in sample_days:
+        inb_sum = sum(l["qty"] for l in active_sku["inbound"] if l["day"] <= d)
+        base_cum_in.append(cur_total + inb_sum)
+        plan_cum_in.append(cur_total + inb_sum + (planned_qty if d >= t["sea"] else 0))
 
     fig_exp = go.Figure()
-    # 상한선(P95) 투명 경계
+
+    # 1) 기존 재고 + 예정 입고 (회색 계단선)
     fig_exp.add_trace(go.Scatter(
-        x=dates_x, y=p95_y, mode="lines", line=dict(width=0),
-        showlegend=False, hoverinfo="skip"
-    ))
-    # 하한선(P20) ~ 상한선(P95) 사이 반투명 민트 음영 밴드
-    fig_exp.add_trace(go.Scatter(
-        x=dates_x, y=p20_y, mode="lines",
-        line=dict(color="rgba(9, 99, 81, 0.35)", width=1.5, dash="dot"),
-        fill="tonexty", fillcolor="rgba(9, 99, 81, 0.14)",
-        name="수요 예측 범위 (P20~P95)"
-    ))
-    # 중심 평균선
-    fig_exp.add_trace(go.Scatter(
-        x=dates_x, y=mean_y, mode="lines+markers",
-        line=dict(color="#096351", width=3.5),
-        marker=dict(size=6, color="#096351"),
-        name="누적 예측 수요(평균)"
-    ))
-    # 기존 보유·예정 공급선
-    fig_exp.add_trace(go.Scatter(
-        x=dates_x, y=base_sup_y, mode="lines",
+        x=dates_x, y=base_cum_in, mode="lines",
         line=dict(color="#64748B", width=2, dash="dash", shape="hv"),
-        name="기존 가용 공급(재고+입고)"
-    ))
-    # 담당자 희망 발주량 포함 공급선
-    fig_exp.add_trace(go.Scatter(
-        x=dates_x, y=plan_sup_y, mode="lines",
-        line=dict(color="#EA580C", width=3, shape="hv"),
-        name=f"희망 발주({planned_qty:,}개) 반영 공급"
+        name="기존 공급량 (현재재고 + 예정입고)"
     ))
 
-    # 주요 일정 수직선 (datetime 좌표 사용)
+    # 2) 희망 발주량 추가 시 총 공급량 (주황색 굵은 계단선)
+    fig_exp.add_trace(go.Scatter(
+        x=dates_x, y=plan_cum_in, mode="lines+markers",
+        line=dict(color="#EA580C", width=3, shape="hv"),
+        marker=dict(size=6, color="#EA580C"),
+        name=f"희망 발주({planned_qty:,}개) 포함 총 공급량"
+    ))
+
+    # 3) 평균 누적 판매 예측 (진한 초록선)
+    fig_exp.add_trace(go.Scatter(
+        x=dates_x, y=mean_y, mode="lines",
+        line=dict(color="#096351", width=3),
+        name="평균 누적 판매량"
+    ))
+
+    # 4) 보수적(P20) 누적 판매 예측 (연한 초록 점선)
+    fig_exp.add_trace(go.Scatter(
+        x=dates_x, y=p20_y, mode="lines",
+        line=dict(color="#10B981", width=2, dash="dot"),
+        name="보수적(P20) 누적 판매량"
+    ))
+
+    # 주요 일정 수직선
     sea_dt = BASE_DATE + datetime.timedelta(days=t["sea"])
     end_dt = BASE_DATE + datetime.timedelta(days=t["sea"] + t["window"])
     fig_exp.add_vline(x=sea_dt, line_dash="dot", line_color="#2563EB", line_width=2)
     fig_exp.add_annotation(x=sea_dt, y=1.06, yref="paper", text=f"신규 해상 입고 ({fmt_md(t['sea'])})", showarrow=False, font=dict(color="#2563EB", size=12))
 
     fig_exp.add_vline(x=end_dt, line_dash="dash", line_color="#D93025", line_width=2)
-    fig_exp.add_annotation(x=end_dt, y=1.06, yref="paper", text=f"판매 마감일 ({fmt_md(t['sea']+t['window'])})", showarrow=False, font=dict(color="#D93025", size=12))
+    fig_exp.add_annotation(x=end_dt, y=1.06, yref="paper", text=f"신규 발주 판매 마감 ({fmt_md(t['sea']+t['window'])})", showarrow=False, font=dict(color="#D93025", size=12))
 
     fig_exp.update_layout(
-        title=dict(text="주차별 누적 수요 예측(평균 및 상·하한 밴드)과 판매 마감 시점", y=0.96),
+        title=dict(text="총 공급량(희망 발주 포함) vs 누적 판매량 비교", y=0.96),
         xaxis=dict(tickmode="array", tickvals=dates_x[::2], ticktext=tick_labels[::2], showgrid=False),
         yaxis=dict(title="누적 수량 (개)", gridcolor="#E6ECE9", zeroline=True, zerolinecolor="#D9E5DF"),
         plot_bgcolor="white",
-        height=450,
+        height=430,
         margin=dict(t=105, b=40, l=50, r=30),
         legend=dict(orientation="h", yanchor="bottom", y=1.13, xanchor="left", x=0)
     )
     st.plotly_chart(fig_exp, use_container_width=True)
-    st.caption("연한 초록색 음영은 보수적 하한(P20)부터 상한(P95)까지의 누적 수요 예측 구간입니다. 하한선(점선)이 기존 로트 재고량보다 낮으면 판매 마감일까지 미소진 폐기 물량이 발생합니다.")
-
+    st.caption("주황색 선(희망 발주 포함 총 공급량)이 초록색 선(누적 판매량)보다 위에 있을수록 판매 마감일까지 다 팔리지 않고 남는 폐기 위험 물량이 커집니다.")
 # =========================================================
 # [탭 3] 운송 수단 (문제 3) — 상·하한 음영 밴드 + 가용 공급 계단선 비교
 # =========================================================
